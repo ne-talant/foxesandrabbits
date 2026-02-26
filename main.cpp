@@ -6,93 +6,84 @@ using namespace std;
 
 enum Direction { NORTH = 0, EAST = 1, SOUTH = 2, WEST = 3 };
 
-long long global_id = 0;   // для строгого старшинства
+long long global_id = 0;
 
-//--------------------------------------------------
-// БАЗОВЫЙ КЛАСС
-//--------------------------------------------------
+// base class
 class Animal {
 protected:
-    int x, y;
-    Direction dir;
-    int stability;
-    int age;
-    long long id;     // определяет старшинство
+	int x, y;
+	Direction dir;
+	int stability;
+	int age;
+	long long id;
 
 public:
-    Animal(int x, int y, int s, Direction d)
-        : x(x), y(y), stability(s), dir(d), age(0), id(global_id++) {}
+	Animal(int x, int y, int s, Direction d)
+		: x(x), y(y), stability(s), dir(d), age(0), id(global_id++) {}
 
-    virtual ~Animal() {}
+	virtual ~Animal() {}
 
-    virtual void move(int N, int M) = 0;
-    virtual int maxAge() const = 0;
+	virtual void move(int N, int M) = 0;
+	virtual int maxAge() const = 0;
 
-    void rotateIfNeeded() {
-        if (stability > 0 && age > 0 && age % stability == 0)
-            dir = Direction((dir + 1) % 4);
-    }
+	void rotateIfNeeded() {
+		if (stability > 0 && age > 0 && age % stability == 0)
+			dir = Direction((dir + 1) % 4);
+	}
+	
+	void grow() { age++; }
 
-    void grow() { age++; }
+	bool isDead() const { return age >= maxAge(); }
 
-    bool isDead() const { return age >= maxAge(); }
-
-    int getX() const { return x; }
-    int getY() const { return y; }
-    int getAge() const { return age; }
-    Direction getDir() const { return dir; }
-    int getStability() const { return stability; }
-    long long getId() const { return id; }
+	int getX() const { return x; }
+	int getY() const { return y; }
+	int getAge() const { return age; }
+	Direction getDir() const { return dir; }
+	int getStability() const { return stability; }
+	long long getId() const { return id; }
 
 protected:
-    void stepOne(int N, int M) {
-        if (dir == NORTH) x = (x - 1 + N) % N;
-        if (dir == SOUTH) x = (x + 1) % N;
-        if (dir == EAST)  y = (y + 1) % M;
-        if (dir == WEST)  y = (y - 1 + M) % M;
-    }
+	void stepOne(int N, int M) {
+		if (dir == NORTH) x = (x - 1 + N) % N;
+		if (dir == SOUTH) x = (x + 1) % N;
+		if (dir == EAST) y = (y + 1) % M;
+		if (dir == WEST) y = (y - 1 + M) % M;
+	}
 };
 
-//--------------------------------------------------
-// ЗАЯЦ
-//--------------------------------------------------
+// rabbit
 class Rabbit : public Animal {
 public:
-    Rabbit(int x, int y, int s, Direction d)
-        : Animal(x, y, s, d) {}
+	Rabbit(int x, int y, int s, Direction d)
+		: Animal(x, y, s, d) {}
+	void move(int N, int M) override {
+		stepOne(N, M);
+	}
 
-    void move(int N, int M) override {
-        stepOne(N, M);
-    }
-
-    int maxAge() const override { return 10; }
+	int maxAge() const override { return 10; }
 };
 
-//--------------------------------------------------
-// ЛИСА
-//--------------------------------------------------
+// fox
 class Fox : public Animal {
-    int food;
+	int food;
 
 public:
-    Fox(int x, int y, int s, Direction d)
-        : Animal(x, y, s, d), food(0) {}
+	Fox(int x, int y, int s, Direction d)
+		: Animal(x, y, s, d), food(0) {}
 
-    void move(int N, int M) override {
-        stepOne(N, M);
-        stepOne(N, M);  // лиса двигается на 2 клетки
-    }
+	void move(int N, int M) override {
+		stepOne(N, M);
+		stepOne(N, M);
+	}
 
-    int maxAge() const override { return 15; }
+	int maxAge() const override { return 15; }
 
-    void addFood(int f) { food += f; }
-    int getFood() const { return food; }
-    void resetFood() { food = 0; }
+	void addFood(int f) { food += f; }
+	int getFood() const { return food; }
+	void resetFood() { food = 0; }
 };
 
-//--------------------------------------------------
-// МОДЕЛЬ
-//--------------------------------------------------
+// model
 class Model {
     int N, M, K;
     vector<Rabbit> rabbits;
@@ -110,69 +101,96 @@ public:
     }
 
     void step() {
+        // move
+        for (auto& r : rabbits)
+            r.move(N, M);
 
-        // 1️⃣ ДВИЖЕНИЕ
-        for (auto &r : rabbits) r.move(N, M);
-        for (auto &f : foxes) f.move(N, M);
+        for (auto& f : foxes)
+            f.move(N, M);
 
-        // 2️⃣ ПИТАНИЕ (старшие лисы едят первыми)
+        // eat
         sort(foxes.begin(), foxes.end(),
-             [](const Fox &a, const Fox &b) { return a.getId() < b.getId(); });
+            [](const Fox& a, const Fox& b) {
+                return a.getId() < b.getId();
+            });
 
         vector<bool> rabbitAlive(rabbits.size(), true);
 
-        for (auto &f : foxes) {
-            int eaten = 0;
+        for (auto& f : foxes) {
             for (size_t i = 0; i < rabbits.size(); i++) {
                 if (rabbitAlive[i] &&
                     rabbits[i].getX() == f.getX() &&
                     rabbits[i].getY() == f.getY()) {
+
                     rabbitAlive[i] = false;
-                    eaten++;
+                    f.addFood(1);
                 }
             }
-            f.addFood(eaten);
         }
 
-        vector<Rabbit> newRabbits;
+        vector<Rabbit> tmpR;
         for (size_t i = 0; i < rabbits.size(); i++)
             if (rabbitAlive[i])
-                newRabbits.push_back(rabbits[i]);
-        rabbits = newRabbits;
+                tmpR.push_back(rabbits[i]);
 
-        // 3️⃣ СТАРЕНИЕ
-        for (auto &r : rabbits) r.grow();
-        for (auto &f : foxes) f.grow();
+        rabbits = tmpR;
 
-        // смена направления
-        for (auto &r : rabbits) r.rotateIfNeeded();
-        for (auto &f : foxes) f.rotateIfNeeded();
+        // direction
+        for (auto& r : rabbits)
+            if (r.getStability() > 0 &&
+                (r.getAge() + 1) % r.getStability() == 0)
+                r.rotateIfNeeded();
 
-        // 4️⃣ РАЗМНОЖЕНИЕ
+        for (auto& f : foxes)
+            if (f.getStability() > 0 &&
+                (f.getAge() + 1) % f.getStability() == 0)
+                f.rotateIfNeeded();
+
+        // old
+        for (auto& r : rabbits)
+            r.grow();
+
+        for (auto& f : foxes)
+            f.grow();
+
+        // multiply
+        // rabbits
         vector<Rabbit> bornR;
-        for (auto &r : rabbits) {
-            if (r.getAge() == 5 || r.getAge() == 10)
-                bornR.emplace_back(r.getX(), r.getY(),
-                                   r.getStability(), r.getDir());
+        for (auto& r : rabbits) {
+            if (r.getAge() == 5 || r.getAge() == 10) {
+                bornR.emplace_back(
+                    r.getX(),
+                    r.getY(),
+                    r.getStability(),
+                    r.getDir()
+                );
+            }
         }
         rabbits.insert(rabbits.end(), bornR.begin(), bornR.end());
 
+        // foxes
         vector<Fox> bornF;
-        for (auto &f : foxes) {
+        for (auto& f : foxes) {
             if (f.getFood() >= 2) {
-                bornF.emplace_back(f.getX(), f.getY(),
-                                   f.getStability(), f.getDir());
+                bornF.emplace_back(
+                    f.getX(),
+                    f.getY(),
+                    f.getStability(),
+                    f.getDir()
+                );
                 f.resetFood();
             }
         }
         foxes.insert(foxes.end(), bornF.begin(), bornF.end());
 
-        // 5️⃣ ВЫМИРАНИЕ
+        // die
         rabbits.erase(remove_if(rabbits.begin(), rabbits.end(),
-            [](Rabbit &r) { return r.isDead(); }), rabbits.end());
+            [](Rabbit& r) { return r.getAge() >= 10; }),
+            rabbits.end());
 
         foxes.erase(remove_if(foxes.begin(), foxes.end(),
-            [](Fox &f) { return f.isDead(); }), foxes.end());
+            [](Fox& f) { return f.getAge() >= 15; }),
+            foxes.end());
     }
 
     void run() {
@@ -183,10 +201,10 @@ public:
     void print() {
         vector<vector<int>> field(N, vector<int>(M, 0));
 
-        for (auto &r : rabbits)
+        for (auto& r : rabbits)
             field[r.getX()][r.getY()]++;
 
-        for (auto &f : foxes)
+        for (auto& f : foxes)
             field[f.getX()][f.getY()]--;
 
         for (int i = 0; i < N; i++) {
@@ -201,32 +219,32 @@ public:
     }
 };
 
-//--------------------------------------------------
-// MAIN
-//--------------------------------------------------
+
 int main() {
-    int N, M, K;
-    cin >> N >> M >> K;
+	int N, M, K;
+    cout << "N x M x K" << endl;
+	cin >> N >> M >> K;
 
-    int R, F;
-    cin >> R >> F;
+	int R, F;
+    cout << "Rabbits x Foxes" << endl;
+	cin >> R >> F;
 
-    Model model(N, M, K);
+	Model model(N, M, K);
 
-    for (int i = 0; i < R; i++) {
-        int x, y, d, s;
-        cin >> x >> y >> d >> s;
-        model.addRabbit(x, y, d, s);
-    }
+	for (int i = 0; i < R; i++) {
+		int x, y, d, s;
+		cin >> x >> y >> d >> s;
+		model.addRabbit(x, y, d, s);
+	}
 
-    for (int i = 0; i < F; i++) {
-        int x, y, d, s;
-        cin >> x >> y >> d >> s;
-        model.addFox(x, y, d, s);
-    }
+	for (int i = 0; i < F; i++) {
+		int x, y, d, s;
+		cin >> x >> y >> d >> s;
+		model.addFox(x, y, d, s);
+	}
 
-    model.run();
-    model.print();
+	model.run();
+	model.print();
 
-    return 0;
+	return 0;
 }
